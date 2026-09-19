@@ -1,0 +1,639 @@
+---
+title: "Chronological Variograms with Simulated Process Data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Chronological Variograms with Simulated Process Data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7)
+library(chRonostatistics)
+```
+
+Chronological process data should be kept in the order in which it was
+collected. If the order is removed, the short-term sampling variation, longer
+process movement and repeating operating cycles become mixed together.
+
+This vignette uses three simulated examples informed by the treatment of time
+series and variograms in Chapter 9 of *Statistical Methods for Mineral
+Engineers*. The analysis order and interpretation of short- and long-range
+variograms, variance components and engineering limits follow Part X of
+Pitard's *Theory of Sampling and Sampling Practice*, Third Edition (2019).
+The data used here are original simulations generated from known process
+components. This makes the examples reproducible and allows the behaviour of
+each variogram to be explained.
+
+The default focused simulator is deliberately process-like: it has a modest
+positive drift, small operating cycles and low measurement noise. Larger
+cycles or more local variation can still be requested explicitly when they are
+useful for a teaching example.
+
+For a lag of $j$ observations, the chronological semivariogram is
+
+$$
+V(j) = \frac{1}{2N_j}\sum_{i=1}^{N_j}(x_{i+j}-x_i)^2,
+$$
+
+where $N_j$ is the number of valid pairs. `chrono_variogram()` carries out
+this calculation directly from the ordered vector and retains the pair count
+for every lag.
+
+## Example 1: a long record with gradual process movement
+
+The first example represents 360 sequential tails copper results. A low-level
+autocorrelated component describes changes between adjacent samples, while two
+cycles describe shorter operating adjustments and slower changes in the plant.
+The seed fixes the random values, so the same series is produced each time.
+
+```{r example-93-data}
+example_93 <- simulate_chronostatistics(
+  n = 360,
+  interval = 1,
+  mean = 0.165,
+  trend = 0,
+  ar = 0.80,
+  innovation_sd = 0.0035,
+  cycle_period = c(60, 180),
+  cycle_amplitude = c(0.025, 0.010),
+  measurement_sd = 0.004,
+  events = FALSE,
+  seed = 903
+)
+
+tails_cu <- chrono_data(
+  example_93,
+  time,
+  value,
+  interval = 1,
+  units = "% Cu"
+)
+
+summary(tails_cu)
+```
+
+The first check is deliberately simple: confirm the number of observations,
+segments, spacing and scale before calculating any variogram.
+
+```{r example-93-variogram}
+v93 <- chrono_variogram(tails_cu, max_lag = 180, min_pairs = 30)
+ggplot2::autoplot(v93)
+```
+
+At short lags, observations are still related and $V(j)$ is relatively small.
+The semivariance increases as the pairs move further apart. The rise and fall at
+longer lags is caused by the simulated cycles; it should not be read as random
+noise around a flat sill.
+
+This is why lag range matters. A short variogram is useful for studying sampling
+and local process variation. A longer variogram is needed before making a
+judgement about a cycle or slow process movement.
+
+```{r example-93-components}
+components_93 <- chrono_components(v93, cycle_lag = 60)
+components_93[, c(
+  "V0", "V1", "interval_process_variance",
+  "cycle_time", "cycle_contribution", "sill"
+)]
+
+ggplot2::autoplot(v93) +
+  ggplot2::geom_vline(
+    xintercept = components_93$cycle_time,
+    linetype = "dotted"
+  ) +
+  ggplot2::geom_hline(
+    yintercept = components_93$sill,
+    linetype = "dashed"
+  )
+```
+
+The cycle is selected from process knowledge and the plotted minimum. It is not
+chosen automatically because two genuine cycles, an operating change or an
+aliased sampling interval can produce similar shapes.
+
+After inspecting the variogram, return to the complete chronological series to
+check whether the interpretation is compatible with the observed process:
+
+```{r example-93-timeseries}
+ggplot2::autoplot(tails_cu)
+```
+
+## Example 2: a repeating operating cycle
+
+The second example is shorter and has a much stronger repeating component. It
+could represent an hourly plant measurement affected by a 24-hour operating
+cycle. Its scale is deliberately similar to a plant rate rather than a grade.
+
+```{r example-94}
+example_94 <- simulate_chronostatistics(
+  n = 133,
+  interval = 3600,
+  mean = 287,
+  trend = 0,
+  ar = 0.45,
+  innovation_sd = 12,
+  cycle_period = 24,
+  cycle_amplitude = 42,
+  measurement_sd = 10,
+  events = FALSE,
+  seed = 904
+)
+
+plant_rate <- chrono_data(
+  example_94,
+  time,
+  value,
+  interval = 3600,
+  units = "t/h"
+)
+
+summary(plant_rate)
+```
+
+```{r example-94-variogram}
+v94 <- chrono_variogram(plant_rate, max_lag = 65, min_pairs = 30)
+ggplot2::autoplot(v94)
+components_94 <- chrono_components(v94, cycle_lag = 24)
+ggplot2::autoplot(v94) +
+  ggplot2::geom_vline(xintercept = components_94$cycle_time, linetype = "dotted")
+components_94[, c("cycle_time", "cycle_contribution", "sill")]
+```
+
+The corresponding full time series is then checked to see whether the
+repeating variogram structure is visible in the operating record:
+
+```{r example-94-timeseries}
+ggplot2::autoplot(plant_rate)
+```
+
+Pairs separated by about half a cycle tend to lie on opposite sides of the
+wave, so their squared differences are large. Pairs separated by one complete
+cycle are in similar positions and the semivariance falls. The repeated peaks
+and troughs therefore describe a time structure in the process, not a failure
+of the variogram calculation.
+
+## Example 3: short-lag extrapolation
+
+The final example contains 133 observations with a small upward drift, local
+autocorrelation and a weaker cycle. The chronological plot should be inspected
+before reducing this behaviour to a variance component.
+
+```{r example-95-data}
+example_95 <- simulate_chronostatistics(
+  n = 133,
+  interval = 1,
+  mean = 89,
+  trend = 0.018,
+  ar = 0.70,
+  innovation_sd = 1.4,
+  cycle_period = 18,
+  cycle_amplitude = 2.4,
+  measurement_sd = 1.3,
+  events = FALSE,
+  seed = 905
+)
+
+process_measurement <- chrono_data(
+  example_95,
+  time,
+  value,
+  interval = 1,
+  units = "process units"
+)
+
+summary(process_measurement)
+```
+
+There is no observed pair at lag zero because an observation minus itself is
+always zero. The sampling contribution is instead estimated by extrapolating
+the local integral variogram towards the vertical axis. The default Pitard
+method uses the first three eligible short lags and applies
+the $V(0)/2$ endpoint correction. Use the modern intercept method for the
+earlier AICc-selected local fitting method.
+
+```{r example-95-variogram}
+v95 <- chrono_variogram(process_measurement, max_lag = 65, min_pairs = 30)
+ggplot2::autoplot(v95)
+short_v95 <- v95[v95$lag <= 12, ]
+components_95 <- chrono_components(v95, cycle_lag = 18)
+selected <- attr(components_95, "selected_rows")
+i95 <- chrono_integral_variogram(v95, integration = "pitard")
+i95$W_corrected <- i95$W + components_95$V0_raw / (2 * i95$lag)
+
+ggplot2::ggplot(
+  i95[i95$lag <= 12, ],
+  ggplot2::aes(lag_time, W_corrected)
+) +
+  ggplot2::geom_point() +
+  ggplot2::geom_smooth(
+    data = i95[selected, ],
+    method = "lm",
+    formula = y ~ x,
+    se = FALSE
+  ) +
+  ggplot2::geom_hline(
+    yintercept = components_95$V0,
+    linetype = "dashed"
+  ) +
+  ggplot2::theme_bw() +
+  ggplot2::labs(
+    x = "Elapsed lag, t[j]",
+    y = "Corrected Pitard first integral, W(j)"
+  )
+
+components_95[, c(
+  "V0", "V1", "interval_process_variance",
+  "intercept_lags", "trend"
+)]
+```
+
+Finally, inspect the complete series again. This keeps the short-lag
+extrapolation connected to the actual process behaviour rather than treating
+it as a standalone numerical result.
+
+```{r example-95-timeseries}
+ggplot2::autoplot(process_measurement)
+```
+
+`V0` is the estimated sampling variance. The difference between `V1` and `V0`
+is reported as the interval process contribution. These quantities are useful
+engineering summaries, but they remain dependent on the short-lag shape and
+the stability of the process.
+
+## Reading the variance components
+
+The variogram can be treated as a combination of variation acting over
+different time scales. The short-range discontinuity represents sampling and
+measurement variation. Continuous movement represents changes in the process.
+Repeating peaks and troughs represent periodic behaviour. Some point-to-point
+roughness also comes from estimating each ordinate with a finite number of
+pairs.
+
+These ideas are related, but the reported values should not all be added
+together. Since $V(1)$ already contains $V(0)$, the interval process
+contribution is $V(1)-V(0)$ rather than the full value of $V(1)$.
+
+```{r component-definitions}
+component_definitions <- data.frame(
+  quantity = c(
+    "V(0)",
+    "V(1)",
+    "V(1) - V(0)",
+    "Cycle contribution",
+    "Sill",
+    "Trend"
+  ),
+  package_output = c(
+    "V0 / sampling_variance",
+    "V1",
+    "interval_process_variance",
+    "cycle_contribution",
+    "sill",
+    "trend"
+  ),
+  value = c(
+    components_95$V0,
+    components_95$V1,
+    components_95$interval_process_variance,
+    components_95$cycle_contribution,
+    components_95$sill,
+    NA_real_
+  ),
+  interpretation = c(
+    "Sampling, subsampling, preparation and measurement variation extrapolated to zero lag",
+    "Sampling and measurement variation plus process change over one sampling interval",
+    "Process movement occurring within one sampling interval",
+    "Pitard-style half amplitude with the minimum tangent anchored at V(0)",
+    "Long-range variance level used as the descriptive total-variance benchmark",
+    "Direction of the fitted local integral; reported as a diagnostic, not as a variance"
+  ),
+  stringsAsFactors = FALSE
+)
+
+component_definitions
+components_95$trend
+```
+
+### A decomposed variance table
+
+For a compact engineering summary, the sill can be used as the variance
+benchmark. The table below assigns parts of that benchmark to sampling and
+measurement, movement over one sampling interval, and the selected cycle. The
+amount not assigned to those terms is retained as an unallocated remainder.
+
+```{r variance-decomposition}
+variance_decomposition_95 <- variance_breakdown(components_95)
+knitr::kable(
+  variance_decomposition_95,
+  digits = c(0, 4, 4, 1, 0),
+  caption = "Descriptive variance breakdown relative to the sill"
+)
+```
+
+The first three rows are estimated engineering contributions. The remainder is
+calculated as
+
+$$
+\text{remainder} =
+\text{sill} -
+\left\{V(0) + [V(1)-V(0)] + V_{\mathrm{cycle}}\right\}.
+$$
+
+It is not automatically a new physical variance component. It can contain
+longer-range process movement, cycles that were not selected, estimation
+differences and residual variogram roughness. A negative remainder is also
+possible because the intercept, cycle and sill are estimated using different
+parts of the variogram. In that case, the component estimates overlap and
+should be reviewed rather than forced to reconcile.
+
+The standard-deviation column puts each nonnegative variance contribution back
+on the scale of the measured variable. The percentage column is useful for
+comparing contributions within this example, but it is descriptive: it does
+not turn the decomposition into an inferential model.
+
+For a reusable report-style explanation rather than a bare data frame, call
+`report(components_95)`. The returned object contains an overview, key
+findings, caveats and the same `variance_table` used above. This makes the
+output easier to review in an analysis report while keeping the estimates
+available for custom tables and plots.
+
+## Example 4: a synthetic copper-slag case study
+
+Part X illustrates a copper-slag stream sampled every three hours, with a
+target of 10% Cu and specifications of 7% and 14% Cu. The example below is a
+new simulation at the same scale; it does not reproduce the book's data. It
+has a modest short-range measurement component and a 19-sample (57-hour)
+cycle.
+
+```{r example-copper-slag}
+copper <- simulate_chronostatistics(
+  n = 217,
+  interval = 3 * 3600,
+  mean = 10,
+  trend = 0,
+  ar = 0.6,
+  innovation_sd = 1.2,
+  cycle_period = 19,
+  cycle_amplitude = 1.7,
+  measurement_sd = 1.1,
+  events = FALSE,
+  seed = 351
+)
+
+summary(copper)
+
+copper_data <- chrono_data(
+  copper, time, value,
+  interval = 3 * 3600,
+  units = "% Cu",
+  target = 10,
+  lower_spec = 7,
+  upper_spec = 14
+)
+
+copper_variogram <- chrono_variogram(
+  copper_data,
+  max_lag = 60,
+  min_pairs = 30
+)
+ggplot2::autoplot(copper_variogram)
+
+copper_components <- chrono_components(
+  copper_variogram,
+  cycle_lag = 19,
+  cycle_peak_lag = 13
+)
+report(copper_components)
+ggplot2::autoplot(copper_variogram, components = copper_components)
+```
+
+The explicit `cycle_peak_lag` records the analyst's graphical choice. The
+Pitard-style cycle contribution uses the selected peak/tangent and $V(0)$ to
+estimate a half-amplitude. It is not an automatic peak detector. Return to the
+full chronological record before deciding whether the inferred cycle has a
+credible operating explanation:
+
+```{r example-copper-timeseries}
+ggplot2::autoplot(copper_data)
+```
+
+## Example 5: a synthetic paper-scale iron-ore stream
+
+Minnitt and Pitard's iron-ore example uses stratified assays collected every
+four hours. It describes a short cycle around 17 lags and a larger cycle around
+208 lags, or about 2.8 and 35 days. The simulation below uses those engineering
+scales and a similar mean and standard deviation, but all observations are
+newly generated for this vignette.
+
+```{r example-iron-ore}
+iron <- simulate_chronostatistics(
+  n = 1511,
+  interval = 4 * 3600,
+  mean = 66.1,
+  ar = 0.75,
+  innovation_sd = 0.18,
+  cycle_period = c(17, 208),
+  cycle_amplitude = c(0.28, 0.50),
+  measurement_sd = 0.25,
+  events = FALSE,
+  seed = 2008
+)
+
+iron_data <- chrono_data(
+  iron, time, value,
+  interval = 4 * 3600,
+  units = "% Fe",
+  target = 66.1,
+  lower_spec = 65,
+  upper_spec = 67.5
+)
+
+iron_variogram <- chrono_variogram(
+  iron_data, max_lag = 300, min_pairs = 30
+)
+iron_components <- chrono_components(
+  iron_variogram, cycle_lag = 208
+)
+
+plot(iron_data)
+ggplot2::autoplot(iron_variogram, components = iron_components)
+iron_components[, c("V0", "V1", "cycle_contribution", "sill")]
+report(iron_components)
+```
+
+Supplying `components` adds a Pitard-style interpretation layer to the
+variogram: horizontal lines mark $V(0)$, $V(1)$ and the sill, while the
+selected `cycle_lag` is marked with the estimated cyclic contribution. The
+cycle remains user-defined because a variogram peak alone cannot distinguish
+equipment, feed, maintenance and sampling-alias effects.
+
+The paper's main practical lesson is that the variogram makes time-scale
+structure visible. The short cycle should not automatically be treated as
+random noise, and the long cycle should not be removed without understanding
+whether it comes from feed, equipment, maintenance or operator practice.
+
+## Example 6: an operating plant table
+
+The larger simulator produces multiple related variables rather than one
+isolated series. Online product quality can be analysed at the hourly grid,
+while laboratory results retain their own sparse reporting process.
+
+```{r example-plant-process}
+plant <- simulate_plant_process(n = 24 * 90, seed = 20260717)
+
+product <- chrono_data(
+  plant,
+  timestamp,
+  product_fe,
+  interval = 3600,
+  units = "% Fe"
+)
+
+plant_variogram <- chrono_variogram(
+  product, max_lag = 24 * 14, min_pairs = 30
+)
+
+summary(product)
+plot(product)
+plot(plant_variogram)
+```
+
+Rows where the plant is unavailable become segment boundaries. This prevents a
+lag pair from silently spanning a shutdown. The `lab_result_available` column
+is intentionally not passed directly to `chrono_data()` as an hourly series:
+it represents delayed, sparse laboratory reporting and should be regularised
+according to the analytical question first.
+
+## Optional tsibble workflow
+
+Users who prefer tidyverse syntax can keep their data in a tibble and pass
+named columns directly to `chrono_data()`. If the data are already stored as a
+`tsibble`, the index can be inferred and the measured variable supplied
+directly. This section is optional: `tsibble`, `fable`, `feasts` and
+`fabletools` are not required for the core chronological analysis.
+
+```{r example-tibble, eval=FALSE}
+plant_tbl <- dplyr::transmute(
+  plant,
+  timestamp,
+  product_fe,
+  availability
+)
+
+product <- chrono_data(
+  plant_tbl,
+  time = timestamp,
+  value = product_fe,
+  interval = 3600
+)
+```
+
+With a `tsibble` installed:
+
+```{r example-tsibble, eval=FALSE}
+plant_ts <- tsibble::as_tsibble(
+  plant,
+  index = timestamp,
+  key = ore_domain
+)
+product <- chrono_data(plant_ts, value = product_fe, interval = 3600)
+```
+
+## Integral conventions
+
+The default `pitard` method retains the discrete cumulative construction used
+for the Part X endpoint correction. The `trapezoid` option integrates against
+physical lag from $V(0)=0$ and is useful as a transparent comparison. Keeping
+the choice explicit allows the two numerical conventions to be compared for a
+new analysis.
+
+Write $j$ for the discrete lag index and $t_j$ for the corresponding elapsed
+lag. For the first integral, write
+
+$$
+W(j) = \frac{1}{j}\int_0^j V(u)\,du.
+$$
+
+This is an average of the semivariogram from zero lag to lag $j$; it does not
+create new observations. With discrete lags, the package approximates the area
+between successive ordinates. The Part X endpoint correction then writes the
+working value as $W(j) = W_0(j) + V(0)/(2j)$, where $W_0(j)$ is the discrete
+curve before the unknown zero-lag endpoint is restored. Regressing these local
+values against $t_j$ and solving that endpoint relation gives the extrapolated
+$V(0)$. The integral smooths noisy short-lag ordinates so this extrapolation is
+less dependent on any one pair estimate.
+
+
+```{r integration-comparison}
+trapezoid <- chrono_integral_variogram(v95, integration = "trapezoid")
+pitard <- chrono_integral_variogram(v95, integration = "pitard")
+
+integration_comparison <- rbind(
+  transform(as.data.frame(trapezoid), method = "trapezoid"),
+  transform(as.data.frame(pitard), method = "pitard")
+)
+
+ggplot2::ggplot(
+  integration_comparison[integration_comparison$lag <= 20, ],
+  ggplot2::aes(lag_time, W, colour = method)
+) +
+  ggplot2::geom_line() +
+  ggplot2::theme_bw() +
+  ggplot2::labs(x = "Lag", y = "First integral variogram, W(j)")
+```
+
+## Engineering limits
+
+Progressive limits show how the estimated sampling, interval and cyclic
+contributions widen an engineering operating band. The linear-root convention
+and a root-sum-square comparison are both available. Neither should be described
+as a probability-based prediction interval without a separate statistical
+model that supports that interpretation.
+
+In the Pitard linear-root presentation, the interval term is $V(1)$. In the
+RSS comparison it is the non-overlapping interval-process contribution
+$V(1)-V(0)$. Each output row records the exact quantities included in its
+width.
+
+```{r limits}
+linear_limits <- chrono_control_limits(components_95)
+rss_limits <- chrono_control_limits(components_95, convention = "rss")
+
+rbind(
+  as.data.frame(linear_limits),
+  as.data.frame(rss_limits)
+)[, c("stage", "lower", "upper", "convention")]
+
+plot(linear_limits)
+```
+
+## Checks before using plant data
+
+The timestamps must be ordered and regularly spaced. Missing observations and
+large time gaps create separate segments, and lag pairs do not cross those
+segments by default. Smaller departures from the declared spacing are rejected
+because an index lag would then combine different elapsed times.
+
+The chronological plot and the operating history should be reviewed with the
+variogram. Ore-domain changes, shutdowns, maintenance, changing targets and
+sensor faults can all create structure that resembles a cycle or trend.
+Chronostatistics helps separate variation by time scale, but it does not replace
+the process knowledge needed to explain that variation.
+
+## References
+
+Napier-Munn, T. J. (2025). *Statistical Methods for Mineral Engineers: How to
+Design Experiments and Analyse Data*, revised edition, Chapter 9. Julius
+Kruttschnitt Mineral Research Centre, The University of Queensland.
+[Book information from JKTech](https://jktech.com.au/statsbook).
+
+Pitard, F. F. (2019). *Theory of Sampling and Sampling Practice*, third
+edition, Part X: Chronostatistics. CRC Press.
+[Publisher information and DOI](https://doi.org/10.1201/9781351105934).
+
+Minnitt, R. C. A., and Pitard, F. F. (2008). *Application of variography to
+the control of species in material process streams: %Fe in an iron ore
+product*. The Journal of the Southern African Institute of Mining and
+Metallurgy, 108, 109–122. The example scales are adapted as a synthetic
+teaching scenario; the paper's observations and figures are not redistributed.

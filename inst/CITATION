@@ -1,0 +1,14 @@
+citHeader("To cite chRonostatistics in publications, use:")
+
+bibentry(
+  bibtype = "Manual",
+  title = "chRonostatistics: Chronological Variograms for Process Data",
+  author = person(
+    "Matt", "Clauson",
+    comment = c(Affiliation = "Clauson Geometallurgy Consultancy")
+  ),
+  organization = "Clauson Geometallurgy Consultancy",
+  year = "2026",
+  note = "R package version 1.0.0",
+  url = "https://github.com/ClausonGeomet/chRonostatistics-r"
+)

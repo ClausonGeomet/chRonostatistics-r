@@ -1,0 +1,30 @@
+Package: chRonostatistics
+Title: Chronological Variograms for Process Data
+Version: 1.0.0
+Authors@R: person("Matt", "Clauson",
+    email = "matthewclauson@outlook.com",
+    role = c("aut", "cre", "cph"),
+    comment = c(Affiliation = "Clauson Geometallurgy Consultancy"))
+Description: Implements Gy and Pitard style chronological variograms, integral
+    transforms, variance-component decompositions, engineering control limits,
+    and reproducible process simulations. The methodology is informed by
+    Napier-Munn (2025) <https://jktech.com.au/statsbook> and Pitard
+    (2019) <doi:10.1201/9781351105934>.
+Depends:
+    R (>= 4.1.0)
+License: MIT + file LICENSE
+URL: https://github.com/ClausonGeomet/chRonostatistics-r
+BugReports: https://github.com/ClausonGeomet/chRonostatistics-r/issues
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports:
+    ggplot2,
+    rlang
+Suggests:
+    knitr,
+    rmarkdown,
+    tsibble,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+RoxygenNote: 7.3.1

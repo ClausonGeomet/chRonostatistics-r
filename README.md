@@ -1,6 +1,9 @@
 # chRonostatistics <img src="man/figures/logo.png" align="right" height="139" alt="chRonostatistics logo" />
 
 <!-- badges: start -->
+[![R-CMD-check](https://github.com/ClausonGeomet/chRonostatistics-r/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/ClausonGeomet/chRonostatistics-r/actions/workflows/R-CMD-check.yaml)
+[![GitHub release](https://img.shields.io/github/v/release/ClausonGeomet/chRonostatistics-r)](https://github.com/ClausonGeomet/chRonostatistics-r/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 <!-- badges: end -->
 
 `chRonostatistics` is an R package for analysing variation in ordered process
@@ -15,12 +18,14 @@ reproducible process simulators.
 
 ## Installation
 
-Install the development version from GitHub:
+The current release is **v1.0.0**. Install it directly from GitHub:
 
 ```r
 install.packages("remotes")
-remotes::install_github("ClausonGeomet/chRonostatistics-r")
+remotes::install_github("ClausonGeomet/chRonostatistics-r@v1.0.0")
 ```
+
+If you want the latest development version from `main`, omit the version tag.
 
 Then load the package:
 

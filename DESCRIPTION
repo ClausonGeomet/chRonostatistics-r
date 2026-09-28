@@ -4,7 +4,7 @@ Version: 1.0.0
 Authors@R: person("Matt", "Clauson",
     email = "matthewclauson@outlook.com",
     role = c("aut", "cre", "cph"),
-    comment = c(Affiliation = "Clauson Geometallurgy Consultancy"))
+    comment = c(Affiliation = "Clauson Geomet"))
 Description: Implements Gy and Pitard style chronological variograms, integral
     transforms, variance-component decompositions, engineering control limits,
     and reproducible process simulations. The methodology is informed by
